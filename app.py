@@ -11,11 +11,11 @@ app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 portfolio = {}
 fantasy_portfolio = {}
-alerts = []
-pending_alerts = {}
+pending_alerts = {}  # Store coin:threshold pairs for pending alerts
+triggered_alerts = []  # Store triggered alert messages
 last_known_prices = {}
 last_prices = {}
-last_predictions = {}  # Cache predictions to avoid rate limits
+last_predictions = {}
 
 # Replace with your Bearer Token
 client = tweepy.Client(bearer_token="YOUR_BEARER_TOKEN_HERE")
@@ -57,12 +57,12 @@ def get_sentiment(coin):
         print(f"Sentiment error for {coin}: {e}")
         return 0
 
-def predict_price(coin):
+def predict_price(coin, prices):
     global last_predictions
-    # Check if we have a recent prediction
     if coin in last_predictions:
         prediction_time, prediction_value = last_predictions[coin]
-        if time.time() - prediction_time < 300:  # Cache for 5 minutes
+        if time.time() - prediction_time < 300 and prediction_value > 0:
+            print(f"Using cached prediction for {coin}: {prediction_value}")
             return prediction_value
     
     try:
@@ -71,8 +71,8 @@ def predict_price(coin):
         response.raise_for_status()
         history = response.json().get('prices', [])
         if not history or len(history) < 2:
-            print(f"Prediction error for {coin}: Insufficient price history data")
-            current_price = last_known_prices.get(coin, {}).get('usd', 0)
+            print(f"Prediction error for {coin}: Insufficient price history data (history length: {len(history)})")
+            current_price = prices.get(coin, {}).get('usd', 0)
             last_predictions[coin] = (time.time(), current_price)
             return current_price
         X = np.array(range(len(history))).reshape(-1, 1)
@@ -81,18 +81,20 @@ def predict_price(coin):
         next_hour = model.predict([[len(history)]])[0]
         prediction = round(next_hour, 2)
         last_predictions[coin] = (time.time(), prediction)
+        print(f"New prediction for {coin}: {prediction}")
         return prediction
     except Exception as e:
         print(f"Prediction error for {coin}: {e}")
-        current_price = last_known_prices.get(coin, {}).get('usd', 0)
+        current_price = prices.get(coin, {}).get('usd', 0)
         last_predictions[coin] = (time.time(), current_price)
+        print(f"Falling back to current price for {coin}: {current_price}")
         return current_price
 
 @app.route('/')
 def home():
     prices = get_crypto_prices()
     sentiments = {coin: get_sentiment(coin) for coin in prices.keys()}
-    predictions = {coin: predict_price(coin) for coin in prices.keys()}
+    predictions = {coin: predict_price(coin, prices) for coin in prices.keys()}
     total_value = sum(float(amount) * prices[coin].get('usd', 0) for coin, amount in portfolio.items())
     if fantasy_portfolio:
         initial_value = sum(float(amount) for amount in fantasy_portfolio.values())
@@ -106,26 +108,30 @@ def home():
         last_prices[coin] = last_prices.get(coin, prices[coin].get('usd', 0))
     
     # Check pending alerts
-    global alerts, pending_alerts
+    global pending_alerts, triggered_alerts
+    print(f"Pending alerts: {pending_alerts}")
     for coin, threshold in list(pending_alerts.items()):
         current_price = prices[coin].get('usd', 0)
         last_price = last_prices.get(coin, 0)
-        if last_price < threshold <= current_price and coin in pending_alerts:
-            alerts.append(f"{coin.capitalize()} hit ${threshold}!")
+        print(f"Checking {coin}: last={last_price}, current={current_price}, threshold={threshold}")
+        if current_price >= threshold and coin in pending_alerts:
+            triggered_alerts.append(f"{coin.capitalize()} hit ${threshold}!")
+            print(f"Alert triggered for {coin} at ${threshold}")
             del pending_alerts[coin]
     
     for coin in prices.keys():
         last_prices[coin] = prices[coin].get('usd', 0)
     
+    print(f"Triggered alerts: {triggered_alerts}")
     return render_template('index.html', prices=prices, portfolio=portfolio, total_value=total_value,
                           sentiments=sentiments, fantasy_portfolio=fantasy_portfolio, fantasy_gain=fantasy_gain,
-                          predictions=predictions, alerts=alerts)
+                          predictions=predictions, pending_alerts=pending_alerts, triggered_alerts=triggered_alerts)
 
 @app.route('/refresh_prices')
 def refresh_prices():
     prices = get_crypto_prices()
     sentiments = {coin: get_sentiment(coin) for coin in prices.keys()}
-    predictions = {coin: predict_price(coin) for coin in prices.keys()}
+    predictions = {coin: predict_price(coin, prices) for coin in prices.keys()}
     return jsonify({
         'prices': prices,
         'sentiments': sentiments,
@@ -153,11 +159,19 @@ def start_fantasy():
 def set_alert():
     coin = request.form['coin'].lower()
     threshold = request.form['threshold'].strip()
+    if not coin:
+        flash('Please enter a valid coin name.', category='error')
+        return redirect(url_for('home'))
     if not threshold or not threshold.replace('.', '').isdigit():
         flash('Please enter a valid price threshold.', category='error')
         return redirect(url_for('home'))
     threshold = float(threshold)
+    valid_coins = ['bitcoin', 'ethereum', 'ripple', 'cardano', 'solana']
+    if coin not in valid_coins:
+        flash(f'Invalid coin name. Choose from: {", ".join(valid_coins)}', category='error')
+        return redirect(url_for('home'))
     pending_alerts[coin] = threshold
+    flash(f'Alert set for {coin.capitalize()} at ${threshold}', category='success')
     return redirect('/')
 
 if __name__ == '__main__':

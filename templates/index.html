@@ -12,6 +12,17 @@
         <h1 class="text-2xl font-bold">Crypto Pulse</h1>
     </header>
 
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="p-4 mb-4 text-{{ category == 'error' and 'red' or 'green' }}-500 bg-{{ category == 'error' and 'red' or 'green' }}-100 rounded">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
     <!-- Main Content -->
     <main class="p-6 max-w-6xl mx-auto">
         <!-- Prices Table -->
@@ -95,7 +106,7 @@
             {% endif %}
         </section>
 
-        <!-- Predictions & Alerts Section -->
+        <!-- Alerts Section -->
         <section>
             <h2 class="text-xl font-semibold mb-4">Price Alerts</h2>
             <form method="POST" action="/alert" class="flex space-x-4 mb-4">
@@ -103,21 +114,61 @@
                 <input name="threshold" type="number" step="1" placeholder="Price Threshold" class="bg-gray-700 p-2 rounded text-white w-1/3">
                 <button type="submit" class="bg-purple-600 p-2 rounded hover:bg-purple-700 w-1/3">Set Alert</button>
             </form>
-            {% if alerts %}
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Pending Alerts -->
                 <div class="bg-gray-800 p-4 rounded-lg">
-                    <p class="font-bold text-yellow-400">Triggered Alerts:</p>
-                    {% for alert in alerts %}
-                        <p>{{ alert }}</p>
-                    {% endfor %}
+                    <h3 class="font-bold text-yellow-400 mb-2">Pending Alerts</h3>
+                    {% if pending_alerts %}
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr>
+                                    <th class="py-2 px-4 border-b border-gray-700">Coin</th>
+                                    <th class="py-2 px-4 border-b border-gray-700">Threshold (USD)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for coin, threshold in pending_alerts.items() %}
+                                    <tr>
+                                        <td class="py-2 px-4 border-b border-gray-700">{{ coin.capitalize() }}</td>
+                                        <td class="py-2 px-4 border-b border-gray-700">${{ threshold }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p class="text-gray-400">No pending alerts.</p>
+                    {% endif %}
                 </div>
-            {% endif %}
+
+                <!-- Triggered Alerts -->
+                <div class="bg-gray-800 p-4 rounded-lg">
+                    <h3 class="font-bold text-yellow-400 mb-2">Triggered Alerts</h3>
+                    {% if triggered_alerts %}
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr>
+                                    <th class="py-2 px-4 border-b border-gray-700">Message</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in triggered_alerts %}
+                                    <tr>
+                                        <td class="py-2 px-4 border-b border-gray-700">{{ alert }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p class="text-gray-400">No triggered alerts yet.</p>
+                    {% endif %}
+                </div>
+            </div>
         </section>
     </main>
 
     <script>
         function updatePrices() {
             $.getJSON('/refresh_prices', function(data) {
-                // Update prices
                 for (let coin in data.prices) {
                     $('#price-' + coin).text('$' + data.prices[coin].usd.toFixed(2));
                     $('#sentiment-' + coin).text(data.sentiments[coin])
@@ -136,9 +187,7 @@
             });
         }
 
-        // Refresh every minute (60000 milliseconds)
         setInterval(updatePrices, 60000);
-        // Initial update
         updatePrices();
     </script>
 </body>
