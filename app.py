@@ -11,10 +11,10 @@ app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 portfolio = {}
 fantasy_portfolio = {}
-pending_alerts = {}  # Store coin:threshold pairs for pending alerts
-triggered_alerts = []  # Store triggered alert messages
+pending_alerts = {}
+triggered_alerts = []
 last_known_prices = {}
-last_prices = {}
+last_prices = {}  # Tracks the last price for each coin to detect crossings
 last_predictions = {}
 
 # Replace with your Bearer Token
@@ -114,11 +114,13 @@ def home():
         current_price = prices[coin].get('usd', 0)
         last_price = last_prices.get(coin, 0)
         print(f"Checking {coin}: last={last_price}, current={current_price}, threshold={threshold}")
-        if current_price >= threshold and coin in pending_alerts:
+        # Trigger only if price crosses the threshold (from below to above)
+        if last_price < threshold <= current_price and coin in pending_alerts:
             triggered_alerts.append(f"{coin.capitalize()} hit ${threshold}!")
             print(f"Alert triggered for {coin} at ${threshold}")
             del pending_alerts[coin]
     
+    # Update last prices for the next iteration
     for coin in prices.keys():
         last_prices[coin] = prices[coin].get('usd', 0)
     
