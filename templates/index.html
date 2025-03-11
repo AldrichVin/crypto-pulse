@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Crypto Pulse</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body class="bg-gray-900 text-white font-sans">
     <!-- Header -->
@@ -16,15 +17,24 @@
         <!-- Prices Table -->
         <section class="mb-8">
             <h2 class="text-xl font-semibold mb-4">Live Prices</h2>
-            <div class="grid grid-cols-3 gap-4 bg-gray-800 p-4 rounded-lg">
+            <div id="price-table" class="grid grid-cols-4 gap-4 bg-gray-800 p-4 rounded-lg">
                 <div class="font-bold text-gray-300">Coin</div>
                 <div class="font-bold text-gray-300">Price (USD)</div>
                 <div class="font-bold text-gray-300">Sentiment</div>
+                <div class="font-bold text-gray-300">Next Hour Prediction</div>
                 {% for coin, data in prices.items() %}
                     <div>{{ coin.capitalize() }}</div>
-                    <div>${{ data['usd'] | round(2) }}</div>
-                    <div class="{% if sentiments[coin] > 0 %}text-green-400{% elif sentiments[coin] < 0 %}text-red-400{% else %}text-gray-400{% endif %}">
+                    <div id="price-{{ coin }}">${{ data.get('usd', 0) | round(2) }}</div>
+                    <div id="sentiment-{{ coin }}" class="{% if sentiments[coin] > 0 %}text-green-400{% elif sentiments[coin] < 0 %}text-red-400{% else %}text-gray-400{% endif %}">
                         {{ sentiments[coin] }}
+                    </div>
+                    <div id="prediction-{{ coin }}" class="{% if predictions[coin] > data.get('usd', 0) %}text-green-400{% elif predictions[coin] < data.get('usd', 0) %}text-red-400{% else %}text-gray-400{% endif %}">
+                        ${{ predictions[coin] | round(2) }}
+                        {% if data.get('usd', 0) != 0 %}
+                            ({{ ((predictions[coin] - data.get('usd', 0)) / data.get('usd', 0) * 100) | round(1) }}%)
+                        {% else %}
+                            (N/A)
+                        {% endif %}
                     </div>
                 {% endfor %}
             </div>
@@ -43,7 +53,7 @@
                     {% for coin, amount in portfolio.items() %}
                         <div class="flex justify-between py-1">
                             <span>{{ coin.capitalize() }}: {{ amount }}</span>
-                            <span>${{ (amount * prices[coin]['usd']) | round(2) }}</span>
+                            <span>${{ (amount * prices[coin].get('usd', 0)) | round(2) }}</span>
                         </div>
                     {% endfor %}
                     <div class="border-t border-gray-700 mt-2 pt-2 font-bold">
@@ -56,7 +66,7 @@
         </section>
 
         <!-- Fantasy League Section -->
-        <section>
+        <section class="mb-8">
             <h2 class="text-xl font-semibold mb-4">Fantasy League ($10,000)</h2>
             <form method="POST" action="/fantasy" class="grid grid-cols-2 gap-4 mb-4">
                 {% for coin in prices.keys() %}
@@ -72,7 +82,7 @@
                     {% for coin, amount in fantasy_portfolio.items() %}
                         <div class="flex justify-between py-1">
                             <span>{{ coin.capitalize() }}: ${{ amount }}</span>
-                            <span>${{ (amount * prices[coin]['usd'] / 10000) | round(2) }}</span>
+                            <span>${{ (amount * prices[coin].get('usd', 0) / 10000) | round(2) }}</span>
                         </div>
                     {% endfor %}
                     <div class="border-t border-gray-700 mt-2 pt-2 font-bold">
@@ -84,6 +94,52 @@
                 </div>
             {% endif %}
         </section>
+
+        <!-- Predictions & Alerts Section -->
+        <section>
+            <h2 class="text-xl font-semibold mb-4">Price Alerts</h2>
+            <form method="POST" action="/alert" class="flex space-x-4 mb-4">
+                <input name="coin" placeholder="Coin (e.g., bitcoin)" class="bg-gray-700 p-2 rounded text-white w-1/3">
+                <input name="threshold" type="number" step="1" placeholder="Price Threshold" class="bg-gray-700 p-2 rounded text-white w-1/3">
+                <button type="submit" class="bg-purple-600 p-2 rounded hover:bg-purple-700 w-1/3">Set Alert</button>
+            </form>
+            {% if alerts %}
+                <div class="bg-gray-800 p-4 rounded-lg">
+                    <p class="font-bold text-yellow-400">Triggered Alerts:</p>
+                    {% for alert in alerts %}
+                        <p>{{ alert }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </section>
     </main>
+
+    <script>
+        function updatePrices() {
+            $.getJSON('/refresh_prices', function(data) {
+                // Update prices
+                for (let coin in data.prices) {
+                    $('#price-' + coin).text('$' + data.prices[coin].usd.toFixed(2));
+                    $('#sentiment-' + coin).text(data.sentiments[coin])
+                        .removeClass('text-green-400 text-red-400 text-gray-400')
+                        .addClass(data.sentiments[coin] > 0 ? 'text-green-400' : data.sentiments[coin] < 0 ? 'text-red-400' : 'text-gray-400');
+                    let currentPrice = data.prices[coin].usd;
+                    let prediction = data.predictions[coin];
+                    let colorClass = prediction > currentPrice ? 'text-green-400' : prediction < currentPrice ? 'text-red-400' : 'text-gray-400';
+                    let percentChange = currentPrice !== 0 ? ((prediction - currentPrice) / currentPrice * 100).toFixed(1) : 'N/A';
+                    $('#prediction-' + coin).html('$' + prediction.toFixed(2) + (currentPrice !== 0 ? ' (' + percentChange + '%)' : ' (N/A)'))
+                        .removeClass('text-green-400 text-red-400 text-gray-400')
+                        .addClass(colorClass);
+                }
+            }).fail(function() {
+                console.log('Error refreshing prices');
+            });
+        }
+
+        // Refresh every minute (60000 milliseconds)
+        setInterval(updatePrices, 60000);
+        // Initial update
+        updatePrices();
+    </script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, jsonify
 import requests
 import tweepy
 from textblob import TextBlob
@@ -12,6 +12,7 @@ fantasy_portfolio = {}
 alerts = []  # Displayed triggered alerts
 pending_alerts = {}  # Store coin:threshold pairs to monitor
 last_known_prices = {}  # Cache last valid prices
+last_prices = {}  # Track last price for alert logic
 
 # Replace with your Bearer Token
 client = tweepy.Client(bearer_token="YOUR_BEARER_TOKEN_HERE")
@@ -32,8 +33,13 @@ def get_crypto_prices():
         if last_known_prices:
             return last_known_prices
         else:
-            return {'bitcoin': {'usd': 0}, 'ethereum': {'usd': 0}, 'ripple': {'usd': 0}, 
-                    'cardano': {'usd': 0}, 'solana': {'usd': 0}}
+            return {
+                'bitcoin': {'usd': 0},
+                'ethereum': {'usd': 0},
+                'ripple': {'usd': 0},
+                'cardano': {'usd': 0},
+                'solana': {'usd': 0}
+            }
 
 def get_sentiment(coin):
     try:
@@ -76,16 +82,38 @@ def home():
     else:
         fantasy_gain = 0
     
+    # Update last prices
+    for coin in prices.keys():
+        last_prices[coin] = last_prices.get(coin, prices[coin].get('usd', 0))
+    
     # Check pending alerts
     global alerts, pending_alerts
     for coin, threshold in list(pending_alerts.items()):
         current_price = prices[coin].get('usd', 0)
-        if current_price >= threshold and coin in pending_alerts:  # Trigger if above threshold
+        last_price = last_prices.get(coin, 0)
+        # Trigger if price crosses threshold upward (e.g., from below to above)
+        if last_price < threshold <= current_price and coin in pending_alerts:
             alerts.append(f"{coin.capitalize()} hit ${threshold}!")
             del pending_alerts[coin]  # Remove after triggering
+    
+    # Update last_prices with current prices for next iteration
+    for coin in prices.keys():
+        last_prices[coin] = prices[coin].get('usd', 0)
+    
     return render_template('index.html', prices=prices, portfolio=portfolio, total_value=total_value,
                           sentiments=sentiments, fantasy_portfolio=fantasy_portfolio, fantasy_gain=fantasy_gain,
                           predictions=predictions, alerts=alerts)
+
+@app.route('/refresh_prices')
+def refresh_prices():
+    prices = get_crypto_prices()
+    sentiments = {coin: get_sentiment(coin) for coin in prices.keys()}
+    predictions = {coin: predict_price(coin) for coin in prices.keys()}
+    return jsonify({
+        'prices': prices,
+        'sentiments': sentiments,
+        'predictions': predictions
+    })
 
 @app.route('/portfolio', methods=['POST'])
 def add_to_portfolio():
