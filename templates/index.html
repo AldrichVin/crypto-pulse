@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Crypto Pulse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white">
+    <header class="bg-gray-800 p-4">
+        <h1 class="text-2xl font-bold">Crypto Pulse</h1>
+    </header>
+    <main class="p-6">
+        <h2 class="text-xl font-semibold mb-4">Live Prices</h2>
+        <div class="grid grid-cols-2 gap-4 bg-gray-800 p-4 rounded-lg">
+            <div class="font-bold">Coin</div>
+            <div class="font-bold">Price (USD)</div>
+            {% for coin, data in prices.items() %}
+                <div>{{ coin.capitalize() }}</div>
+                <div>${{ data['usd'] | round(2) }}</div>
+            {% endfor %}
+        </div>
+    </main>
+</body>
+</html>
