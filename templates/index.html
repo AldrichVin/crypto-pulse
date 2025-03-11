@@ -16,12 +16,16 @@
         <!-- Prices Table -->
         <section class="mb-8">
             <h2 class="text-xl font-semibold mb-4">Live Prices</h2>
-            <div class="grid grid-cols-2 gap-4 bg-gray-800 p-4 rounded-lg">
+            <div class="grid grid-cols-3 gap-4 bg-gray-800 p-4 rounded-lg">
                 <div class="font-bold text-gray-300">Coin</div>
                 <div class="font-bold text-gray-300">Price (USD)</div>
+                <div class="font-bold text-gray-300">Sentiment</div>
                 {% for coin, data in prices.items() %}
                     <div>{{ coin.capitalize() }}</div>
                     <div>${{ data['usd'] | round(2) }}</div>
+                    <div class="{% if sentiments[coin] > 0 %}text-green-400{% elif sentiments[coin] < 0 %}text-red-400{% else %}text-gray-400{% endif %}">
+                        {{ sentiments[coin] }}
+                    </div>
                 {% endfor %}
             </div>
         </section>
