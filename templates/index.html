@@ -27,7 +27,10 @@
     <main class="p-6 max-w-6xl mx-auto">
         <!-- Prices Table -->
         <section class="mb-8">
-            <h2 class="text-xl font-semibold mb-4">Live Prices</h2>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Live Prices</h2>
+                <button id="refresh-button" class="bg-blue-600 p-2 rounded hover:bg-blue-700">Refresh</button>
+            </div>
             <div id="price-table" class="grid grid-cols-4 gap-4 bg-gray-800 p-4 rounded-lg">
                 <div class="font-bold text-gray-300">Coin</div>
                 <div class="font-bold text-gray-300">Price (USD)</div>
@@ -170,7 +173,9 @@
 
     <script>
         function updatePrices() {
+            console.log("updatePrices called");
             $.getJSON('/refresh_prices', function(data) {
+                console.log("Received data:", data);
                 for (let coin in data.prices) {
                     $('#price-' + coin).text('$' + data.prices[coin].usd.toFixed(2));
                     $('#sentiment-' + coin).text(data.sentiments[coin])
@@ -184,13 +189,23 @@
                         .removeClass('text-green-400 text-red-400 text-gray-400')
                         .addClass(colorClass);
                 }
-            }).fail(function() {
-                console.log('Error refreshing prices');
+            }).fail(function(jqXHR, textStatus, errorThrown) {
+                console.error('Error refreshing prices:', textStatus, errorThrown);
             });
         }
 
+        // Ensure jQuery is ready before attaching the event
+        $(document).ready(function() {
+            console.log("jQuery ready, attaching click event to refresh button");
+            $('#refresh-button').click(function() {
+                console.log("Refresh button clicked");
+                updatePrices();
+            });
+        });
+
+        // Automatic refresh every 60 seconds
         setInterval(updatePrices, 60000);
-        updatePrices();
+        updatePrices(); // Initial load
     </script>
 </body>
 </html>
