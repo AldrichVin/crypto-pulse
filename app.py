@@ -11,10 +11,10 @@ app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 portfolio = {}
 fantasy_portfolio = {}
-pending_alerts = {}
+pending_alerts = {}  # Now maps coin to a list of thresholds: {coin: [threshold1, threshold2, ...]}
 triggered_alerts = []
 last_known_prices = {}
-last_prices = {}  # Tracks the last price for each coin to detect crossings
+last_prices = {}
 last_predictions = {}
 
 # Replace with your Bearer Token
@@ -110,14 +110,23 @@ def home():
     # Check pending alerts
     global pending_alerts, triggered_alerts
     print(f"Pending alerts: {pending_alerts}")
-    for coin, threshold in list(pending_alerts.items()):
+    for coin in pending_alerts.keys():
         current_price = prices[coin].get('usd', 0)
         last_price = last_prices.get(coin, 0)
-        print(f"Checking {coin}: last={last_price}, current={current_price}, threshold={threshold}")
-        # Trigger only if price crosses the threshold (from below to above)
-        if last_price < threshold <= current_price and coin in pending_alerts:
-            triggered_alerts.append(f"{coin.capitalize()} hit ${threshold}!")
-            print(f"Alert triggered for {coin} at ${threshold}")
+        thresholds = pending_alerts[coin]  # List of thresholds for this coin
+        print(f"Checking {coin}: last={last_price}, current={current_price}, thresholds={thresholds}")
+        # Check each threshold for this coin
+        remaining_thresholds = []
+        for threshold in thresholds:
+            if last_price < threshold <= current_price:
+                triggered_alerts.append(f"{coin.capitalize()} hit ${threshold}!")
+                print(f"Alert triggered for {coin} at ${threshold}")
+            else:
+                remaining_thresholds.append(threshold)
+        # Update the list of thresholds (remove triggered ones)
+        if remaining_thresholds:
+            pending_alerts[coin] = remaining_thresholds
+        else:
             del pending_alerts[coin]
     
     # Update last prices for the next iteration
@@ -172,7 +181,11 @@ def set_alert():
     if coin not in valid_coins:
         flash(f'Invalid coin name. Choose from: {", ".join(valid_coins)}', category='error')
         return redirect(url_for('home'))
-    pending_alerts[coin] = threshold
+    # Append the new threshold to the list for this coin
+    if coin in pending_alerts:
+        pending_alerts[coin].append(threshold)
+    else:
+        pending_alerts[coin] = [threshold]
     flash(f'Alert set for {coin.capitalize()} at ${threshold}', category='success')
     return redirect('/')
 

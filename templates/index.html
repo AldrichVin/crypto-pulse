@@ -127,11 +127,13 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for coin, threshold in pending_alerts.items() %}
-                                    <tr>
-                                        <td class="py-2 px-4 border-b border-gray-700">{{ coin.capitalize() }}</td>
-                                        <td class="py-2 px-4 border-b border-gray-700">${{ threshold }}</td>
-                                    </tr>
+                                {% for coin, thresholds in pending_alerts.items() %}
+                                    {% for threshold in thresholds %}
+                                        <tr>
+                                            <td class="py-2 px-4 border-b border-gray-700">{{ coin.capitalize() }}</td>
+                                            <td class="py-2 px-4 border-b border-gray-700">${{ threshold | float | round(2) }}</td>
+                                        </tr>
+                                    {% endfor %}
                                 {% endfor %}
                             </tbody>
                         </table>
