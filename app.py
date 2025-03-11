@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, redirect, jsonify
+from flask import Flask, render_template, request, redirect, jsonify, flash
+from flask import url_for
 import requests
 import tweepy
 from textblob import TextBlob
@@ -7,12 +8,14 @@ from sklearn.linear_model import LinearRegression
 import time
 
 app = Flask(__name__)
+app.secret_key = 'your_secret_key'
 portfolio = {}
 fantasy_portfolio = {}
-alerts = []  # Displayed triggered alerts
-pending_alerts = {}  # Store coin:threshold pairs to monitor
-last_known_prices = {}  # Cache last valid prices
-last_prices = {}  # Track last price for alert logic
+alerts = []
+pending_alerts = {}
+last_known_prices = {}
+last_prices = {}
+last_predictions = {}  # Cache predictions to avoid rate limits
 
 # Replace with your Bearer Token
 client = tweepy.Client(bearer_token="YOUR_BEARER_TOKEN_HERE")
@@ -55,19 +58,35 @@ def get_sentiment(coin):
         return 0
 
 def predict_price(coin):
+    global last_predictions
+    # Check if we have a recent prediction
+    if coin in last_predictions:
+        prediction_time, prediction_value = last_predictions[coin]
+        if time.time() - prediction_time < 300:  # Cache for 5 minutes
+            return prediction_value
+    
     try:
         url = f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart?vs_currency=usd&days=1"
-        history = requests.get(url, timeout=10).json()['prices']
-        if len(history) < 2:
-            return 0
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        history = response.json().get('prices', [])
+        if not history or len(history) < 2:
+            print(f"Prediction error for {coin}: Insufficient price history data")
+            current_price = last_known_prices.get(coin, {}).get('usd', 0)
+            last_predictions[coin] = (time.time(), current_price)
+            return current_price
         X = np.array(range(len(history))).reshape(-1, 1)
         y = np.array([price[1] for price in history])
         model = LinearRegression().fit(X, y)
         next_hour = model.predict([[len(history)]])[0]
-        return round(next_hour, 2)
+        prediction = round(next_hour, 2)
+        last_predictions[coin] = (time.time(), prediction)
+        return prediction
     except Exception as e:
         print(f"Prediction error for {coin}: {e}")
-        return 0
+        current_price = last_known_prices.get(coin, {}).get('usd', 0)
+        last_predictions[coin] = (time.time(), current_price)
+        return current_price
 
 @app.route('/')
 def home():
@@ -91,12 +110,10 @@ def home():
     for coin, threshold in list(pending_alerts.items()):
         current_price = prices[coin].get('usd', 0)
         last_price = last_prices.get(coin, 0)
-        # Trigger if price crosses threshold upward (e.g., from below to above)
         if last_price < threshold <= current_price and coin in pending_alerts:
             alerts.append(f"{coin.capitalize()} hit ${threshold}!")
-            del pending_alerts[coin]  # Remove after triggering
+            del pending_alerts[coin]
     
-    # Update last_prices with current prices for next iteration
     for coin in prices.keys():
         last_prices[coin] = prices[coin].get('usd', 0)
     
@@ -135,8 +152,12 @@ def start_fantasy():
 @app.route('/alert', methods=['POST'])
 def set_alert():
     coin = request.form['coin'].lower()
-    threshold = float(request.form['threshold'])
-    pending_alerts[coin] = threshold  # Store the alert
+    threshold = request.form['threshold'].strip()
+    if not threshold or not threshold.replace('.', '').isdigit():
+        flash('Please enter a valid price threshold.', category='error')
+        return redirect(url_for('home'))
+    threshold = float(threshold)
+    pending_alerts[coin] = threshold
     return redirect('/')
 
 if __name__ == '__main__':
