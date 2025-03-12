@@ -23,7 +23,7 @@
 
     <main class="p-6 max-w-6xl mx-auto">
         <div class="flex border-b border-gray-700 mb-6">
-            <button class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-500 focus:outline-none active" data-tab="prices">Prices</button>
+            <button class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-500 focus:outline-none" data-tab="prices">Prices</button>
             <button class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-500 focus:outline-none" data-tab="portfolio">Portfolio</button>
             <button class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-500 focus:outline-none" data-tab="fantasy">Fantasy</button>
             <button class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-500 focus:outline-none" data-tab="alerts">Alerts</button>
@@ -97,7 +97,8 @@
                     {% for coin, amount in fantasy_portfolio.items() %}
                         <div class="flex justify-between py-1">
                             <span>{{ coin.capitalize() }}: ${{ amount }}</span>
-                            <span>${{ (amount * prices[coin].get('usd', 0) / 10000) | round(2) }}</span>
+                            <span>${{ (amount / 10000) * prices[coin].get('usd', 0) | round(2) }}</span>
+                            <!-- This should be the current value based on initial investment -->
                         </div>
                     {% endfor %}
                     <div class="border-t border-gray-700 mt-2 pt-2 font-bold">
@@ -176,7 +177,12 @@
                 $('.tab-content').addClass('hidden');
                 $('#' + $(this).data('tab')).removeClass('hidden');
             });
-            $('.tab-btn[data-tab="prices"]').addClass('active border-blue-500');
+
+            var activeTab = '{{ active_tab }}';
+            $('.tab-btn').removeClass('active border-blue-500').addClass('border-transparent');
+            $('.tab-content').addClass('hidden');
+            $('.tab-btn[data-tab="' + activeTab + '"]').addClass('active border-blue-500');
+            $('#' + activeTab).removeClass('hidden');
         });
 
         function updatePrices() {

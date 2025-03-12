@@ -106,24 +106,26 @@ def predict_price(coin, prices):
         last_predictions[coin] = (time.time(), current_price)
         return current_price
 
-@app.route('/')
-def home():
+@app.route('/', methods=['GET'])
+def home(active_tab='prices'):
     prices = get_crypto_prices()
     sentiments = {coin: get_sentiment(coin) for coin in prices.keys()}
     predictions = {coin: predict_price(coin, prices) for coin in prices.keys()}
     total_value = sum(float(amount) * prices[coin].get('usd', 0) for coin, amount in portfolio.items())
     if fantasy_portfolio:
+        # Calculate initial coin quantities based on initial prices (approximated here)
+        initial_prices = get_crypto_prices()  # Fetch prices at game start (simplified; in reality, store initial prices)
         initial_value = sum(float(amount) for amount in fantasy_portfolio.values())
-        current_value = sum(float(amount) * prices[coin].get('usd', 0) / 10000 for coin, amount in fantasy_portfolio.items())
+        current_value = sum((float(amount) / initial_prices[coin].get('usd', 0)) * prices[coin].get('usd', 0)
+                           for coin, amount in fantasy_portfolio.items() if coin in initial_prices and coin in prices)
         fantasy_gain = ((current_value - initial_value) / initial_value * 100) if initial_value else 0
     else:
         fantasy_gain = 0
 
-    # Update last prices and check alerts
     global triggered_alerts
     for coin in prices.keys():
         current_price = prices[coin].get('usd', 0)
-        last_price = last_prices.get(coin, current_price)
+        last_price = last_prices.get(coin, 0)
         if coin in pending_alerts:
             remaining_thresholds = []
             for threshold in pending_alerts[coin]:
@@ -141,7 +143,8 @@ def home():
     logger.debug(f"Pending alerts: {pending_alerts}, Triggered alerts: {triggered_alerts}")
     return render_template('index.html', prices=prices, portfolio=portfolio, total_value=total_value,
                           sentiments=sentiments, fantasy_portfolio=fantasy_portfolio, fantasy_gain=fantasy_gain,
-                          predictions=predictions, pending_alerts=pending_alerts, triggered_alerts=triggered_alerts)
+                          predictions=predictions, pending_alerts=pending_alerts, triggered_alerts=triggered_alerts,
+                          active_tab=active_tab)
 
 @app.route('/refresh_prices')
 def refresh_prices():
@@ -164,7 +167,7 @@ def add_to_portfolio():
         flash(f"Added {amount} {coin.capitalize()} to portfolio", 'success')
     else:
         flash(f"Invalid coin: {coin}", 'error')
-    return redirect('/')
+    return redirect(url_for('home', active_tab='portfolio'))
 
 @app.route('/fantasy', methods=['POST'])
 def start_fantasy():
@@ -175,7 +178,7 @@ def start_fantasy():
         flash("Fantasy league started!", 'success')
     else:
         flash("Total exceeds $10,000 limit", 'error')
-    return redirect('/')
+    return redirect(url_for('home', active_tab='fantasy'))
 
 @app.route('/alert', methods=['POST'])
 def set_alert():
@@ -195,7 +198,7 @@ def set_alert():
             flash(f"Alert set for {coin.capitalize()} at ${threshold}", 'success')
         else:
             flash(f"Alert for {coin.capitalize()} at ${threshold} already exists", 'error')
-    return redirect(url_for('home'))
+    return redirect(url_for('home', active_tab='alerts'))
 
 if __name__ == '__main__':
     app.run(debug=True)
