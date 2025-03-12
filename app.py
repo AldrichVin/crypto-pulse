@@ -10,22 +10,23 @@ import logging
 import os
 
 app = Flask(__name__)
-app.secret_key = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'  # Your secret key
+app.secret_key = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'
+
+# Global variables
 portfolio = {}
-fantasy_portfolio = {}
-pending_alerts = {}  # {coin: [threshold1, threshold2, ...]}
+fantasy_portfolio = {}  # Stores invested amounts (e.g., {'bitcoin': 5000})
+fantasy_initial_prices = {}  # Stores prices at the time of investment (e.g., {'bitcoin': 80000})
+pending_alerts = {}
 triggered_alerts = []
 last_known_prices = {}
 last_prices = {}
 last_predictions = {}
 last_api_call_time = 0
 
-# Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Use environment variable for Heroku, fallback for local testing
-client = tweepy.Client(bearer_token=os.getenv("TWITTER_BEARER_TOKEN", "AAAAAAAAAAAAAAAAAAAAAEB3zwEAAAAAYR%2FUa%2BTUhKKMV33%2FJbqVPTzE%2FJM%3DABwT408FK9loxpXtBwc39WHd4VnBdUNZetxCgGumTacBE838OZ"))
+client = tweepy.Client(bearer_token=os.getenv("TWITTER_BEARER_TOKEN", "your_token_here"))
 
 def get_crypto_prices():
     global last_known_prices, last_api_call_time
@@ -107,17 +108,23 @@ def predict_price(coin, prices):
         return current_price
 
 @app.route('/', methods=['GET'])
+@app.route('/<active_tab>', methods=['GET'])
 def home(active_tab='prices'):
     prices = get_crypto_prices()
     sentiments = {coin: get_sentiment(coin) for coin in prices.keys()}
     predictions = {coin: predict_price(coin, prices) for coin in prices.keys()}
     total_value = sum(float(amount) * prices[coin].get('usd', 0) for coin, amount in portfolio.items())
     if fantasy_portfolio:
-        # Calculate initial coin quantities based on initial prices (approximated here)
-        initial_prices = get_crypto_prices()  # Fetch prices at game start (simplified; in reality, store initial prices)
-        initial_value = sum(float(amount) for amount in fantasy_portfolio.values())
-        current_value = sum((float(amount) / initial_prices[coin].get('usd', 0)) * prices[coin].get('usd', 0)
-                           for coin, amount in fantasy_portfolio.items() if coin in initial_prices and coin in prices)
+        # Calculate initial value using stored initial prices
+        initial_value = sum(float(amount) for amount in fantasy_portfolio.values())  # Total invested dollars
+        # Calculate current value based on the number of coins bought initially
+        current_value = 0
+        for coin, amount in fantasy_portfolio.items():
+            if coin in fantasy_initial_prices and fantasy_initial_prices[coin]['usd'] > 0:
+                # Number of coins bought at initial price
+                num_coins = float(amount) / fantasy_initial_prices[coin]['usd']
+                # Current value of those coins at the latest price
+                current_value += num_coins * prices[coin].get('usd', 0)
         fantasy_gain = ((current_value - initial_value) / initial_value * 100) if initial_value else 0
     else:
         fantasy_gain = 0
@@ -144,6 +151,7 @@ def home(active_tab='prices'):
     return render_template('index.html', prices=prices, portfolio=portfolio, total_value=total_value,
                           sentiments=sentiments, fantasy_portfolio=fantasy_portfolio, fantasy_gain=fantasy_gain,
                           predictions=predictions, pending_alerts=pending_alerts, triggered_alerts=triggered_alerts,
+                          fantasy_initial_prices=fantasy_initial_prices,  # Added this line
                           active_tab=active_tab)
 
 @app.route('/refresh_prices')
@@ -171,10 +179,23 @@ def add_to_portfolio():
 
 @app.route('/fantasy', methods=['POST'])
 def start_fantasy():
-    total = sum(float(v) for v in request.form.values() if v)
+    global fantasy_initial_prices
+    total = 0
+    # Only consider non-empty values for total calculation
+    for value in request.form.values():
+        if value.strip():  # Check if the value is not empty or just whitespace
+            total += float(value)
     if total <= 10000:
         fantasy_portfolio.clear()
-        fantasy_portfolio.update({k: float(v) for k, v in request.form.items() if v})
+        fantasy_initial_prices.clear()
+        # Store the current prices at the time of starting the fantasy game
+        current_prices = get_crypto_prices()
+        for coin in request.form.keys():
+            value = request.form[coin].strip()
+            if value and float(value) > 0:  # Only process if value is non-empty and positive
+                if coin in current_prices:
+                    fantasy_initial_prices[coin] = {'usd': current_prices[coin]['usd']}
+                    fantasy_portfolio[coin] = float(value)
         flash("Fantasy league started!", 'success')
     else:
         flash("Total exceeds $10,000 limit", 'error')

@@ -80,7 +80,6 @@
                 {% endif %}
             </div>
         </div>
-
         <div id="fantasy" class="tab-content hidden">
             <h2 class="text-xl font-semibold mb-4">Fantasy League ($10,000)</h2>
             <form method="POST" action="/fantasy" class="grid grid-cols-2 gap-4 mb-4">
@@ -97,8 +96,17 @@
                     {% for coin, amount in fantasy_portfolio.items() %}
                         <div class="flex justify-between py-1">
                             <span>{{ coin.capitalize() }}: ${{ amount }}</span>
-                            <span>${{ (amount / 10000) * prices[coin].get('usd', 0) | round(2) }}</span>
-                            <!-- This should be the current value based on initial investment -->
+                            <!-- Calculate the number of coins bought and their current value -->
+                            <span>
+                                {% set initial_price = fantasy_initial_prices[coin].get('usd', 0) %}
+                                {% if initial_price > 0 %}
+                                    {% set num_coins = (amount / initial_price) %}
+                                    {% set current_value = num_coins * prices[coin].get('usd', 0) %}
+                                    ${{ current_value | round(2) }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </span>
                         </div>
                     {% endfor %}
                     <div class="border-t border-gray-700 mt-2 pt-2 font-bold">
@@ -110,7 +118,6 @@
                 </div>
             {% endif %}
         </div>
-
         <div id="alerts" class="tab-content hidden">
             <h2 class="text-xl font-semibold mb-4">Price Alerts</h2>
             <form method="POST" action="/alert" class="flex space-x-4 mb-4">
@@ -198,7 +205,7 @@
                     $('#price-' + coin).text('$' + data.prices[coin].usd.toFixed(2));
                     $('#sentiment-' + coin).text(data.sentiments[coin])
                         .removeClass('text-green-400 text-red-400 text-gray-400')
-                        .addClass(data.sentiments[coin] > 0 ? 'text-green-400' : data.sentiments[coin] < 0 ? 'text-red-400' : 'text-gray-400');
+                        .addClass(data.sentiments[coin] > 0 ? 'text-green-400' : data.sentiments[coin] < 0 ? 'test-red-400' : 'text-gray-400');
                     const currentPrice = data.prices[coin].usd;
                     const predictedPrice = data.predictions[coin];
                     const percentChange = currentPrice !== 0 ? ((predictedPrice - currentPrice) / currentPrice * 100).toFixed(1) : 'N/A';
