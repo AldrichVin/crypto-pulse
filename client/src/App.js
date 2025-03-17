@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PriceTable from './components/PriceTable';
 
 function App() {
   const [activeTab, setActiveTab] = useState('prices');
@@ -21,7 +22,7 @@ function App() {
           ))}
         </div>
         <div className="tab-content">
-          {activeTab === 'prices' && <div>Prices Tab</div>}
+          {activeTab === 'prices' && <PriceTable />}
           {activeTab === 'portfolio' && <div>Portfolio Tab</div>}
           {activeTab === 'fantasy' && <div>Fantasy Tab</div>}
           {activeTab === 'alerts' && <div>Alerts Tab</div>}
