@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import PriceTable from './components/PriceTable';
+import Portfolio from './components/Portfolio';
+import Fantasy from './components/Fantasy';
+import Alerts from './components/Alerts';
 
 function App() {
   const [activeTab, setActiveTab] = useState('prices');
@@ -23,9 +26,9 @@ function App() {
         </div>
         <div className="tab-content">
           {activeTab === 'prices' && <PriceTable />}
-          {activeTab === 'portfolio' && <div>Portfolio Tab</div>}
-          {activeTab === 'fantasy' && <div>Fantasy Tab</div>}
-          {activeTab === 'alerts' && <div>Alerts Tab</div>}
+          {activeTab === 'portfolio' && <Portfolio />}
+          {activeTab === 'fantasy' && <Fantasy />}
+          {activeTab === 'alerts' && <Alerts />}
         </div>
       </main>
     </div>
