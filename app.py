@@ -25,7 +25,7 @@ last_api_call_time = 0
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-client = tweepy.Client(bearer_token=os.getenv("TWITTER_BEARER_TOKEN", "your_token_here"))
+client = tweepy.Client(bearer_token=os.getenv("TWITTER_BEARER_TOKEN", "AAAAAAAAAAAAAAAAAAAAAEB3zwEAAAAAYR%2FUa%2BTUhKKMV33%2FJbqVPTzE%2FJM%3DABwT408FK9loxpXtBwc39WHd4VnBdUNZetxCgGumTacBE838OZ"))
 
 # Functions (unchanged: get_crypto_prices, get_sentiment, predict_price)
 def get_crypto_prices():
