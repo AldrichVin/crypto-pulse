@@ -1,5 +1,4 @@
-from flask import Flask, render_template, request, redirect, jsonify, flash
-from flask import url_for
+from flask import Flask, request, jsonify, send_from_directory
 import requests
 import tweepy
 from textblob import TextBlob
@@ -9,13 +8,13 @@ import time
 import logging
 import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='client/build', static_url_path='/')
 app.secret_key = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'
 
-# Global variables
+# Global variables (unchanged)
 portfolio = {}
-fantasy_portfolio = {}  # Stores invested amounts (e.g., {'bitcoin': 5000})
-fantasy_initial_prices = {}  # Stores prices at the time of investment (e.g., {'bitcoin': 80000})
+fantasy_portfolio = {}
+fantasy_initial_prices = {}
 pending_alerts = {}
 triggered_alerts = []
 last_known_prices = {}
@@ -28,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 client = tweepy.Client(bearer_token=os.getenv("TWITTER_BEARER_TOKEN", "your_token_here"))
 
+# Functions (unchanged: get_crypto_prices, get_sentiment, predict_price)
 def get_crypto_prices():
     global last_known_prices, last_api_call_time
     current_time = time.time()
@@ -107,23 +107,22 @@ def predict_price(coin, prices):
         last_predictions[coin] = (time.time(), current_price)
         return current_price
 
-@app.route('/', methods=['GET'])
-@app.route('/<active_tab>', methods=['GET'])
-def home(active_tab='prices'):
+@app.route('/')
+def serve_react():
+    return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/api/prices', methods=['GET'])
+def home_api():
     prices = get_crypto_prices()
     sentiments = {coin: get_sentiment(coin) for coin in prices.keys()}
     predictions = {coin: predict_price(coin, prices) for coin in prices.keys()}
     total_value = sum(float(amount) * prices[coin].get('usd', 0) for coin, amount in portfolio.items())
     if fantasy_portfolio:
-        # Calculate initial value using stored initial prices
-        initial_value = sum(float(amount) for amount in fantasy_portfolio.values())  # Total invested dollars
-        # Calculate current value based on the number of coins bought initially
+        initial_value = sum(float(amount) for amount in fantasy_portfolio.values())
         current_value = 0
         for coin, amount in fantasy_portfolio.items():
             if coin in fantasy_initial_prices and fantasy_initial_prices[coin]['usd'] > 0:
-                # Number of coins bought at initial price
                 num_coins = float(amount) / fantasy_initial_prices[coin]['usd']
-                # Current value of those coins at the latest price
                 current_value += num_coins * prices[coin].get('usd', 0)
         fantasy_gain = ((current_value - initial_value) / initial_value * 100) if initial_value else 0
     else:
@@ -138,7 +137,6 @@ def home(active_tab='prices'):
             for threshold in pending_alerts[coin]:
                 if last_price < threshold <= current_price:
                     triggered_alerts.append(f"{coin.capitalize()} hit ${threshold}!")
-                    logger.info(f"Alert triggered: {coin} at ${threshold}")
                 else:
                     remaining_thresholds.append(threshold)
             if remaining_thresholds:
@@ -147,16 +145,15 @@ def home(active_tab='prices'):
                 del pending_alerts[coin]
         last_prices[coin] = current_price
 
-    logger.debug(f"Pending alerts: {pending_alerts}, Triggered alerts: {triggered_alerts}")
-    return render_template('index.html', prices=prices, portfolio=portfolio, total_value=total_value,
-                          sentiments=sentiments, fantasy_portfolio=fantasy_portfolio, fantasy_gain=fantasy_gain,
-                          predictions=predictions, pending_alerts=pending_alerts, triggered_alerts=triggered_alerts,
-                          fantasy_initial_prices=fantasy_initial_prices,  # Added this line
-                          active_tab=active_tab)
+    return jsonify({
+        'prices': prices, 'portfolio': portfolio, 'total_value': total_value,
+        'sentiments': sentiments, 'fantasy_portfolio': fantasy_portfolio, 'fantasy_gain': fantasy_gain,
+        'predictions': predictions, 'pending_alerts': pending_alerts, 'triggered_alerts': triggered_alerts,
+        'fantasy_initial_prices': fantasy_initial_prices
+    })
 
 @app.route('/refresh_prices')
 def refresh_prices():
-    logger.debug("Refreshing prices endpoint called")
     prices = get_crypto_prices()
     sentiments = {coin: get_sentiment(coin) for coin in prices.keys()}
     predictions = {coin: predict_price(coin, prices) for coin in prices.keys()}
@@ -165,61 +162,50 @@ def refresh_prices():
         'prices': prices, 'sentiments': sentiments, 'predictions': predictions, 'is_cached': is_cached
     })
 
-@app.route('/portfolio', methods=['POST'])
+@app.route('/api/portfolio', methods=['POST'])
 def add_to_portfolio():
-    coin = request.form['coin'].lower()
-    amount = float(request.form['amount'])
+    data = request.get_json()
+    coin = data['coin'].lower()
+    amount = float(data['amount'])
     prices = get_crypto_prices()
     if coin in prices:
         portfolio[coin] = portfolio.get(coin, 0) + amount
-        flash(f"Added {amount} {coin.capitalize()} to portfolio", 'success')
-    else:
-        flash(f"Invalid coin: {coin}", 'error')
-    return redirect(url_for('home', active_tab='portfolio'))
+        return jsonify({'message': f"Added {amount} {coin.capitalize()} to portfolio"}), 200
+    return jsonify({'error': f"Invalid coin: {coin}"}), 400
 
-@app.route('/fantasy', methods=['POST'])
+@app.route('/api/fantasy', methods=['POST'])
 def start_fantasy():
     global fantasy_initial_prices
-    total = 0
-    # Only consider non-empty values for total calculation
-    for value in request.form.values():
-        if value.strip():  # Check if the value is not empty or just whitespace
-            total += float(value)
+    data = request.get_json()
+    total = sum(float(value) for value in data.values() if value)
     if total <= 10000:
         fantasy_portfolio.clear()
         fantasy_initial_prices.clear()
-        # Store the current prices at the time of starting the fantasy game
         current_prices = get_crypto_prices()
-        for coin in request.form.keys():
-            value = request.form[coin].strip()
-            if value and float(value) > 0:  # Only process if value is non-empty and positive
-                if coin in current_prices:
-                    fantasy_initial_prices[coin] = {'usd': current_prices[coin]['usd']}
-                    fantasy_portfolio[coin] = float(value)
-        flash("Fantasy league started!", 'success')
-    else:
-        flash("Total exceeds $10,000 limit", 'error')
-    return redirect(url_for('home', active_tab='fantasy'))
+        for coin, value in data.items():
+            if value and float(value) > 0 and coin in current_prices:
+                fantasy_initial_prices[coin] = {'usd': current_prices[coin]['usd']}
+                fantasy_portfolio[coin] = float(value)
+        return jsonify({'message': "Fantasy league started!"}), 200
+    return jsonify({'error': "Total exceeds $10,000 limit"}), 400
 
-@app.route('/alert', methods=['POST'])
+@app.route('/api/alert', methods=['POST'])
 def set_alert():
-    coin = request.form.get('coin', '').lower()
-    threshold = request.form.get('threshold', '').strip()
+    data = request.get_json()
+    coin = data.get('coin', '').lower()
+    threshold = data.get('threshold', '')
     valid_coins = ['bitcoin', 'ethereum', 'ripple', 'cardano', 'solana']
     if not coin or coin not in valid_coins:
-        flash(f"Invalid coin. Use: {', '.join(valid_coins)}", 'error')
-    elif not threshold or not threshold.replace('.', '').isdigit():
-        flash("Invalid threshold. Enter a number.", 'error')
-    else:
-        threshold = float(threshold)
-        if coin not in pending_alerts:
-            pending_alerts[coin] = []
-        if threshold not in pending_alerts[coin]:
-            pending_alerts[coin].append(threshold)
-            flash(f"Alert set for {coin.capitalize()} at ${threshold}", 'success')
-        else:
-            flash(f"Alert for {coin.capitalize()} at ${threshold} already exists", 'error')
-    return redirect(url_for('home', active_tab='alerts'))
+        return jsonify({'error': f"Invalid coin. Use: {', '.join(valid_coins)}"}), 400
+    if not threshold or not str(threshold).replace('.', '').isdigit():
+        return jsonify({'error': "Invalid threshold. Enter a number."}), 400
+    threshold = float(threshold)
+    if coin not in pending_alerts:
+        pending_alerts[coin] = []
+    if threshold not in pending_alerts[coin]:
+        pending_alerts[coin].append(threshold)
+        return jsonify({'message': f"Alert set for {coin.capitalize()} at ${threshold}"}), 200
+    return jsonify({'error': f"Alert for {coin.capitalize()} at ${threshold} already exists"}), 400
 
 if __name__ == '__main__':
     app.run(debug=True)
