@@ -205,7 +205,7 @@
                     $('#price-' + coin).text('$' + data.prices[coin].usd.toFixed(2));
                     $('#sentiment-' + coin).text(data.sentiments[coin])
                         .removeClass('text-green-400 text-red-400 text-gray-400')
-                        .addClass(data.sentiments[coin] > 0 ? 'text-green-400' : data.sentiments[coin] < 0 ? 'test-red-400' : 'text-gray-400');
+                        .addClass(data.sentiments[coin] > 0 ? 'text-green-400' : data.sentiments[coin] < 0 ? 'text-red-400' : 'text-gray-400');
                     const currentPrice = data.prices[coin].usd;
                     const predictedPrice = data.predictions[coin];
                     const percentChange = currentPrice !== 0 ? ((predictedPrice - currentPrice) / currentPrice * 100).toFixed(1) : 'N/A';
