@@ -161,7 +161,6 @@ def refresh_prices():
     return jsonify({
         'prices': prices, 'sentiments': sentiments, 'predictions': predictions, 'is_cached': is_cached
     })
-
 @app.route('/api/portfolio', methods=['POST'])
 def add_to_portfolio():
     data = request.get_json()
@@ -170,8 +169,8 @@ def add_to_portfolio():
     prices = get_crypto_prices()
     if coin in prices:
         portfolio[coin] = portfolio.get(coin, 0) + amount
-        return jsonify({'message': f"Added {amount} {coin.capitalize()} to portfolio"}), 200
-    return jsonify({'error': f"Invalid coin: {coin}"}), 400
+        return jsonify({'message': f"Added {amount} {coin.capitalize()} to portfolio", 'category': 'success'}), 200
+    return jsonify({'message': f"Invalid coin: {coin}", 'category': 'error'}), 400
 
 @app.route('/api/fantasy', methods=['POST'])
 def start_fantasy():
@@ -186,8 +185,8 @@ def start_fantasy():
             if value and float(value) > 0 and coin in current_prices:
                 fantasy_initial_prices[coin] = {'usd': current_prices[coin]['usd']}
                 fantasy_portfolio[coin] = float(value)
-        return jsonify({'message': "Fantasy league started!"}), 200
-    return jsonify({'error': "Total exceeds $10,000 limit"}), 400
+        return jsonify({'message': "Fantasy league started!", 'category': 'success'}), 200
+    return jsonify({'message': "Total exceeds $10,000 limit", 'category': 'error'}), 400
 
 @app.route('/api/alert', methods=['POST'])
 def set_alert():
@@ -196,16 +195,16 @@ def set_alert():
     threshold = data.get('threshold', '')
     valid_coins = ['bitcoin', 'ethereum', 'ripple', 'cardano', 'solana']
     if not coin or coin not in valid_coins:
-        return jsonify({'error': f"Invalid coin. Use: {', '.join(valid_coins)}"}), 400
+        return jsonify({'message': f"Invalid coin. Use: {', '.join(valid_coins)}", 'category': 'error'}), 400
     if not threshold or not str(threshold).replace('.', '').isdigit():
-        return jsonify({'error': "Invalid threshold. Enter a number."}), 400
+        return jsonify({'message': "Invalid threshold. Enter a number.", 'category': 'error'}), 400
     threshold = float(threshold)
     if coin not in pending_alerts:
         pending_alerts[coin] = []
     if threshold not in pending_alerts[coin]:
         pending_alerts[coin].append(threshold)
-        return jsonify({'message': f"Alert set for {coin.capitalize()} at ${threshold}"}), 200
-    return jsonify({'error': f"Alert for {coin.capitalize()} at ${threshold} already exists"}), 400
+        return jsonify({'message': f"Alert set for {coin.capitalize()} at ${threshold}", 'category': 'success'}), 200
+    return jsonify({'message': f"Alert for {coin.capitalize()} at ${threshold} already exists", 'category': 'error'}), 400
 
 if __name__ == '__main__':
     app.run(debug=True)

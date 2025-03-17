@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-function Alerts() {
+function Alerts({ setMessages }) {
   const [coin, setCoin] = useState('');
   const [threshold, setThreshold] = useState('');
   const [pendingAlerts, setPendingAlerts] = useState({});
@@ -21,14 +21,17 @@ function Alerts() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ coin, threshold })
-    }).then(() => {
-      setCoin('');
-      setThreshold('');
-      fetch('/api/prices').then(res => res.json()).then(data => {
-        setPendingAlerts(data.pending_alerts);
-        setTriggeredAlerts(data.triggered_alerts);
+    })
+      .then(res => res.json())
+      .then(data => {
+        setMessages(prev => [...prev, { message: data.message, category: data.category }]);
+        setCoin('');
+        setThreshold('');
+        fetch('/api/prices').then(res => res.json()).then(data => {
+          setPendingAlerts(data.pending_alerts);
+          setTriggeredAlerts(data.triggered_alerts);
+        });
       });
-    });
   };
 
   return (

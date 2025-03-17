@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 
-function Portfolio() {
+function Portfolio({ setMessages }) {
   const [coin, setCoin] = useState('');
   const [amount, setAmount] = useState('');
   const [portfolio, setPortfolio] = useState({});
+  const [totalValue, setTotalValue] = useState(0);
 
   useEffect(() => {
     fetch('/api/prices')
       .then(res => res.json())
-      .then(data => setPortfolio(data.portfolio));
+      .then(data => {
+        setPortfolio(data.portfolio);
+        setTotalValue(data.total_value);
+      });
   }, []);
 
   const handleSubmit = (e) => {
@@ -17,11 +21,17 @@ function Portfolio() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ coin, amount })
-    }).then(() => {
-      setCoin('');
-      setAmount('');
-      fetch('/api/prices').then(res => res.json()).then(data => setPortfolio(data.portfolio));
-    });
+    })
+      .then(res => res.json())
+      .then(data => {
+        setMessages(prev => [...prev, { message: data.message, category: data.category }]);
+        setCoin('');
+        setAmount('');
+        fetch('/api/prices').then(res => res.json()).then(data => {
+          setPortfolio(data.portfolio);
+          setTotalValue(data.total_value);
+        });
+      });
   };
 
   return (
@@ -34,11 +44,16 @@ function Portfolio() {
       </form>
       <div className="bg-gray-800 p-4 rounded-lg">
         {Object.keys(portfolio).length ? (
-          Object.entries(portfolio).map(([coin, amount]) => (
-            <div key={coin} className="flex justify-between py-1">
-              <span>{coin.charAt(0).toUpperCase() + coin.slice(1)}: {amount}</span>
+          <>
+            {Object.entries(portfolio).map(([coin, amount]) => (
+              <div key={coin} className="flex justify-between py-1">
+                <span>{coin.charAt(0).toUpperCase() + coin.slice(1)}: {amount}</span>
+              </div>
+            ))}
+            <div className="mt-2 text-lg font-semibold">
+              Total Value: ${totalValue.toFixed(2)}
             </div>
-          ))
+          </>
         ) : (
           <p className="text-gray-400">No holdings yet. Add some coins!</p>
         )}

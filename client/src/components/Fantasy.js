@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
 
-function Fantasy() {
+function Fantasy({ setMessages }) {
   const [formData, setFormData] = useState({});
   const [fantasyPortfolio, setFantasyPortfolio] = useState({});
+  const [fantasyGain, setFantasyGain] = useState(0);
+  const [fantasyInitialPrices, setFantasyInitialPrices] = useState({}); // New state
 
   useEffect(() => {
     fetch('/api/prices')
       .then(res => res.json())
-      .then(data => setFantasyPortfolio(data.fantasy_portfolio));
+      .then(data => {
+        setFantasyPortfolio(data.fantasy_portfolio);
+        setFantasyGain(data.fantasy_gain);
+        setFantasyInitialPrices(data.fantasy_initial_prices); // Fetch initial prices
+      });
   }, []);
 
   const handleChange = (coin, value) => {
@@ -20,10 +26,17 @@ function Fantasy() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(formData)
-    }).then(() => {
-      setFormData({});
-      fetch('/api/prices').then(res => res.json()).then(data => setFantasyPortfolio(data.fantasy_portfolio));
-    });
+    })
+      .then(res => res.json())
+      .then(data => {
+        setMessages(prev => [...prev, { message: data.message, category: data.category }]);
+        setFormData({});
+        fetch('/api/prices').then(res => res.json()).then(data => {
+          setFantasyPortfolio(data.fantasy_portfolio);
+          setFantasyGain(data.fantasy_gain);
+          setFantasyInitialPrices(data.fantasy_initial_prices);
+        });
+      });
   };
 
   return (
@@ -49,9 +62,15 @@ function Fantasy() {
         <div className="bg-gray-800 p-4 rounded-lg">
           {Object.entries(fantasyPortfolio).map(([coin, amount]) => (
             <div key={coin} className="flex justify-between py-1">
-              <span>{coin.charAt(0).toUpperCase() + coin.slice(1)}: ${amount}</span>
+              <span>
+                {coin.charAt(0).toUpperCase() + coin.slice(1)}: ${amount} 
+                {fantasyInitialPrices[coin] && ` (Initial: $${fantasyInitialPrices[coin].usd.toFixed(2)})`}
+              </span>
             </div>
           ))}
+          <div className="mt-2 text-lg font-semibold">
+            Fantasy Gain: <span className={fantasyGain >= 0 ? 'text-green-400' : 'text-red-400'}>{fantasyGain.toFixed(1)}%</span>
+          </div>
         </div>
       )}
     </div>
